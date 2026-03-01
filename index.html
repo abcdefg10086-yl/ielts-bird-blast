@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Word Birds (French)</title>
+  <style>
+    html, body { margin:0; padding:0; background:#bfe7ff; }
+    #wrap { width: 900px; margin: 0 auto; }
+    #err{
+      display:none; position:fixed; left:12px; right:12px; top:12px;
+      background:rgba(0,0,0,0.85); color:#fff; padding:10px 12px;
+      font: 14px/1.35 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      z-index:999999; border-radius:8px; white-space:pre-wrap;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="err"></div>
+  <div id="wrap"></div>
+
+  <!-- ✅ 注意顺序：phaser -> words -> main -->
+  <script src="./phaser.min.js"></script>
+  <script src="./words.js"></script>
+
+  <script>
+    // ✅ 报错显示（不再只写“脚本错误”）
+    function showErr(title, msg) {
+      const box = document.getElementById("err");
+      box.style.display = "block";
+      box.textContent = title + "\n" + msg;
+    }
+    window.addEventListener("error", function (e) {
+      const stack = (e.error && e.error.stack) ? ("\n\n" + e.error.stack) : "";
+      showErr(
+        "❌ JS Error:",
+        (e.message || "Unknown") + "\n" +
+        (e.filename || "") + ":" + (e.lineno || "") + ":" + (e.colno || "") +
+        stack
+      );
+    });
+    window.addEventListener("unhandledrejection", function (e) {
+      const r = e.reason;
+      const msg = (r && r.stack) ? r.stack : String(r);
+      showErr("❌ Promise Error:", msg);
+    });
+  </script>
+
+  <script src="./main.js"></script>
+</body>
+</html>
