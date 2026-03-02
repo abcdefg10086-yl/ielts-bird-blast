@@ -6,18 +6,59 @@ if (!WORDS || WORDS.length < 10) {
   alert("词库太少！请检查 words.js 是否正确加载。");
 }
 
+// ── 复仇池（间隔重复系统）──────────────────────────────────
+// 每个词条：{ word, meaning, immediate, questionsSince, totalLeft }
+//   immediate:      还需要立即出现几次（初始=2）
+//   questionsSince: 上次复习后过了多少题（达到5就再复习一次）
+//   totalLeft:      剩余总复习次数（初始=7，归零后移出）
 const REVENGE_POOL = [];
+
+function addToRevenge(wordObj) {
+  const ex = REVENGE_POOL.find(r => r.word === wordObj.word);
+  if (ex) {
+    // 已在池中：重置立即次数和总次数，不重复累加
+    ex.immediate  = Math.max(ex.immediate, 2);
+    ex.totalLeft  = Math.max(ex.totalLeft, 7);
+  } else {
+    REVENGE_POOL.push({ word: wordObj.word, meaning: wordObj.meaning,
+      immediate: 2, questionsSince: 0, totalLeft: 7 });
+  }
+}
+
+// 每道新题开始前调用，更新间隔计数
+function tickRevenge() {
+  REVENGE_POOL.forEach(r => { if (r.immediate === 0) r.questionsSince++; });
+}
+
+function pickCorrectWord() {
+  // 优先1：有 immediate > 0 的词 → 立即出现
+  const imIdx = REVENGE_POOL.findIndex(r => r.immediate > 0);
+  if (imIdx >= 0) {
+    const r = REVENGE_POOL[imIdx];
+    r.immediate--;
+    r.totalLeft--;
+    if (r.totalLeft <= 0) REVENGE_POOL.splice(imIdx, 1);
+    return { word: r.word, meaning: r.meaning };
+  }
+  // 优先2：间隔计数 >= 5 的词 → 间隔复习
+  const spIdx = REVENGE_POOL.findIndex(r => r.immediate === 0 && r.questionsSince >= 5);
+  if (spIdx >= 0) {
+    const r = REVENGE_POOL[spIdx];
+    r.questionsSince = 0;
+    r.totalLeft--;
+    if (r.totalLeft <= 0) REVENGE_POOL.splice(spIdx, 1);
+    return { word: r.word, meaning: r.meaning };
+  }
+  // 普通随机
+  return randPick(WORDS);
+}
 
 const W = 900, H = 550;
 function shuffle(arr) { return Phaser.Utils.Array.Shuffle(arr.slice()); }
 function randPick(arr) { return Phaser.Utils.Array.GetRandom(arr); }
 
-function pickCorrectWord() {
-  if (REVENGE_POOL.length > 0 && Math.random() < 0.40) return randPick(REVENGE_POOL);
-  return randPick(WORDS);
-}
-
 function makeQuestion() {
+  tickRevenge();   // 每题开始前推进间隔计数
   const correct = pickCorrectWord();
   const wrongPool = WORDS.filter(w => w.word !== correct.word);
   const w1 = randPick(wrongPool);
@@ -547,8 +588,13 @@ class GameScene extends Phaser.Scene {
       this.levelQ = 1; this.level++;
       this.showBanner("🎉 LEVEL " + this.level + "!", "#f59e0b");
     }
-    this.levelText.setText("第" + this.level + "关  Q" + this.levelQ + "/5" +
-      (REVENGE_POOL.length > 0 ? "  🔁复仇词:" + REVENGE_POOL.length : ""));
+    // 复仇池状态文字
+    const imCount  = REVENGE_POOL.filter(r => r.immediate > 0).length;
+    const spCount  = REVENGE_POOL.filter(r => r.immediate === 0).length;
+    let revengeInfo = "";
+    if (imCount > 0)       revengeInfo = `  ⚡立即复习:${imCount}词`;
+    else if (spCount > 0)  revengeInfo = `  🔁待复习:${spCount}词`;
+    this.levelText.setText("第" + this.level + "关  Q" + this.levelQ + "/5" + revengeInfo);
     this.tipText.setText("拖鸟→发射，物理击中正确答案的猪！  飞行中点击=技能");
 
     this.spawnLevelBlocks();
@@ -659,7 +705,7 @@ class GameScene extends Phaser.Scene {
       beep(this, 220, 0.14, "sawtooth", 0.06);
 
       const w = this.q.correct;
-      if (!REVENGE_POOL.find(x => x.word === w.word)) REVENGE_POOL.push(w);
+      addToRevenge(w);   // 加入间隔重复：立即×2，之后每5题×1，共7次
       this.showReveal(w.word, w.meaning);
 
       const myRound = this.roundId;
